@@ -3,6 +3,8 @@ project(p3signals_tests)
 set(
 	p3signals_tests_HEADERS
         ${p3signals_tests_SOURCE_DIR}/make_delegate_test.hpp
+        ${p3signals_tests_SOURCE_DIR}/make_slot_test.hpp
+        ${p3signals_tests_SOURCE_DIR}/signals_test.hpp
 )
 
 set(

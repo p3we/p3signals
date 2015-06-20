@@ -26,10 +26,17 @@ namespace p3
 	 * The only way to implement smart make_delegate function which will guess
 	 * number of placeholders parameters is to use partial specialization.
 	 * Unfortunately C++ doesn't support function partial specialization, so
-	 * it was necessarily to intruduce this helper structure.
+	 * it was necessarily to intruduce this intermidiate structure.
 	 */
-	template<int Arity, class T, typename ...Args>
-	struct _DelegateFactory {};
+	template<size_t Arity, class T, typename ...Args>
+	struct _DelegateFactory
+	{
+		static inline std::function<void(Args...)> bind(void (T::*pMethod)(Args...), T *pObj)
+		{
+			static_assert(Arity>=0 && Arity<=5, "Unsupported number of method parameters");
+			return std::function<void(Args...)>();
+		}
+	};
 
 	template<class T, typename ...Args>
 	struct _DelegateFactory<0, T, Args...>

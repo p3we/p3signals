@@ -17,11 +17,15 @@
 #include <cppunit/ui/text/TestRunner.h>
 
 #include "make_delegate_test.hpp"
+#include "make_slot_test.hpp"
+#include "signals_test.hpp"
 
 int main(int argc, char *argv[])
 {
 	CppUnit::TextUi::TestRunner runner;
 	runner.addTest(MakeDelegateTest::suite());
+	runner.addTest(MakeSlotTest::suite());
+	runner.addTest(SignalsTest::suite());
 	return runner.run() ? 0 : 1;
 }
 

@@ -13,13 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef P3WE_GUARD_P3SIGNALS_HPP
 #define P3WE_GUARD_P3SIGNALS_HPP
 
 #include <functional>
-#include <tuple>
+#include <algorithm>
+#include <utility>
 #include <vector>
+#include <mutex>
+
+#include "p3delegate.hpp"
 
 namespace p3
 {
@@ -27,6 +30,11 @@ namespace p3
 	template<typename ...Args> class Slot;
 	template<typename ...Args> class Signal;
 
+	/*!
+	 * \brief Slot holds and manage connection between signal and its handler.
+	 * Lifetime of slot has to be the same as lifetime of handler function.
+	 * After slot or signal destruction also connection is automaticly invalidated.
+	 */
 	template<typename ...Args>
 	class Slot
 	{
@@ -34,11 +42,10 @@ namespace p3
 		friend class Signal<Args...>;
 
 	public:
-		typedef std::function<void(Args...)> SlotFunc;
-
-	public:
-		Slot(const SlotFunc& func)
+		Slot(const std::function<void(Args...)>& func)
 		: m_func(func)
+		, m_pSignal(nullptr)
+		, m_id(0)
 		{
 			// pass
 		}
@@ -47,53 +54,215 @@ namespace p3
 
 		Slot(const Slot&) = delete;
 
-		Slot& operator=(const Slot&) = delete;
+		Slot& operator =(const Slot&) = delete;
 
-		~Slot() = default;
+		~Slot()
+		{
+			if (isConnected())
+			{
+				m_pSignal->disconnect(*this);
+			}
+		}
+
+	public:
+		/*!
+		 * \brief Checks if slot is connected to signal
+		 */
+		operator bool () const
+		{
+			return isConnected();
+		}
+
+		/*!
+		 * \brief Check if slot is connected to signal
+		 */
+		inline bool isConnected() const
+		{
+			return (m_pSignal!=nullptr && m_id>0);
+		}
+
+		/*!
+		 * \brief Explicity executes slot function
+		 * \param args
+		 */
+		void operator ()(Args... args)
+		{
+			exec(args...);
+		}
+
+		/*!
+		 * \brief Explicity executes slot function
+		 * \param args
+		 */
+		inline void exec(Args... args)
+		{
+			if (m_func)
+				m_func(args...);
+		}
 
 	private:
-		SlotFunc m_func;
+		bool attach(Signal<Args...> *pSignal, size_t id)
+		{
+			if (m_pSignal == nullptr && m_id == 0)
+			{
+				m_pSignal = pSignal;
+				m_id = id;
+				return true;
+			}
+			return false;
+		}
+
+		bool detach(Signal<Args...> *pSignal, size_t id)
+		{
+			if (m_pSignal == pSignal && m_id == id)
+			{
+				m_pSignal = nullptr;
+				m_id = 0;
+				return true;
+			}
+			return false;
+		}
+
+	private:
+		std::function<void(Args...)> m_func; ///> function executed on signal trigger
+		Signal<Args...> *m_pSignal; ///> pointer to the connected signal
+		size_t m_id; ///> connection identifier
 	};
 
+	/*!
+	 * \brief Signal
+	 */
 	template<typename ...Args>
 	class Signal
 	{
 	public:
-		Signal() = default;
+		typedef std::vector<std::pair<size_t,Slot<Args...>*>> SlotContainer;
+
+	public:
+		Signal()
+		: m_slotIdSeq(1)
+		{
+			// pass
+		}
 
 		Signal(Signal&&) = default;
 
 		Signal(const Signal&) = delete;
 
-		Signal& operator= (const Signal&) = delete;
+		Signal& operator =(const Signal&) = delete;
 
-		~Signal() = default;
-
-	public:
-		void fire(Args ...args)
+		~Signal()
 		{
 			for (auto itr = m_slots.begin(); itr != m_slots.end(); ++itr)
 			{
-				std::get<1>(*itr)->m_func(args...);
+				itr->second->detach(this, itr->second->m_id);
 			}
 		}
 
+	public:
+		/*!
+		 * \brief Trigger signal and executes connected slots
+		 * \param args
+		 */
+		void operator ()(Args... args)
+		{
+			fire(args...);
+		}
+
+		/*!
+		 * \brief Trigger signal and executes connected slots
+		 * \param args
+		 */
+		void fire(Args... args)
+		{
+			std::unique_lock<std::recursive_mutex> lock;
+
+			for (auto itr = m_slots.begin(); itr != m_slots.end(); ++itr)
+			{
+				itr->second->exec(args...);
+			}
+		}
+
+		/*!
+		 * \brief Connects given slot to signal
+		 * \param slot
+		 * \return
+		 */
+		Signal& operator +=(Slot<Args...> &slot)
+		{
+			return connect(slot);
+		}
+
+		/*!
+		 * \brief Connects given slot to signal
+		 * \param slot
+		 * \return
+		 */
 		Signal& connect(Slot<Args...> &slot)
 		{
-			m_slots.push_back(std::make_tuple(0, &slot));
+			std::unique_lock<std::recursive_mutex> lock;
+
+			if (slot.attach(this, m_slotIdSeq++))
+			{
+				m_slots.push_back(std::make_pair(slot.m_id, &slot));
+			}
 
 			return *this;
 		}
 
+		/*!
+		 * \brief Disconnects given slot from signal
+		 * \param slot
+		 * \return
+		 */
+		Signal& operator -=(Slot<Args...> &slot)
+		{
+			return disconnect(slot);
+		}
+
+		/*!
+		 * \brief Disconnects given slot from signal
+		 * \param slot
+		 * \return
+		 */
 		Signal& disconnect(Slot<Args...> &slot)
 		{
+			std::unique_lock<std::recursive_mutex> lock;
+
+			if (slot.detach(this, slot.m_id))
+			{
+				auto pred = [](std::pair<size_t,Slot<Args...>*> &item) -> bool { return (item.second->m_id == 0); };
+				auto itr = std::remove_if(m_slots.begin(), m_slots.end(), pred);
+				m_slots.erase(itr, m_slots.end());
+			}
+
 			return *this;
+		}
+
+		/*!
+		 * \brief Returns connection quantity
+		 * \return
+		 */
+		inline std::size_t quantity() const
+		{
+			std::unique_lock<std::recursive_mutex> lock;
+			return m_slots.size();
 		}
 
 	private:
-		std::vector<std::tuple<size_t,Slot<Args...>*>> m_slots;
+		mutable std::recursive_mutex m_mutex; ///> mutex to protect signal data
+		std::size_t m_slotIdSeq; ///> sequance used to generate connection identifiers
+		std::vector<std::pair<size_t,Slot<Args...>*>> m_slots; ///> vector of connected slots
 	};
 
+	/*!
+	 * \brief Helper function creates slot for given object method
+	 */
+	template<class T, typename ...Args>
+	inline Slot<Args...> make_slot(void (T::*pMethod)(Args...), T *pObj)
+	{
+		return Slot<Args...>(make_delegate(pMethod, pObj));
+	}
 }
 
 #endif /* P3WE_GUARD_P3SIGNALS_HPP */
