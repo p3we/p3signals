@@ -1,24 +1,27 @@
-#include <iostream>
+/*
+ * (C) Copyright 2015 Artur Sobierak <asobierak@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-#include <p3signals.hpp>
+#include <cppunit/ui/text/TestRunner.h>
 
-using namespace std;
+#include "make_delegate_test.hpp"
 
 int main(int argc, char *argv[])
 {
-	p3::Signal<bool> changed;
-	p3::Slot<bool> change([](bool flag) { cout << "flag changed to " << (flag ? "true" : "false") << endl; });
-
-	changed.connect(change);
-
-	changed.fire(true);
-	changed.fire(false);
-	changed.fire(true);
-
-	changed.disconnect(change);
-
-	changed.fire(false);
-
-	return 0;
+	CppUnit::TextUi::TestRunner runner;
+	runner.addTest(MakeDelegateTest::suite());
+	return runner.run() ? 0 : 1;
 }
 
