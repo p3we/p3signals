@@ -28,4 +28,3 @@ int main(int argc, char *argv[])
 	runner.addTest(SignalsTest::suite());
 	return runner.run() ? 0 : 1;
 }
-

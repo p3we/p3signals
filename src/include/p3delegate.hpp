@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef P3WE_GUARD_P3DELEGATE_HPP
 #define P3WE_GUARD_P3DELEGATE_HPP
 
