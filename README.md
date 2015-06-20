@@ -4,6 +4,8 @@ Tiny C++ library providing signals slots pattern implementation
 Example:
 
 ```C++
+#include <p3signals.hpp>
+
 class Observable
 {
 public:
@@ -38,9 +40,15 @@ int main()
 	Observable foo;
 	Observer bar;
 
+	// connect signal with slot
+	// there are also += and -= operators
 	foo.changed.connect(bar.changeSlot);
 
-	foo.madeChange();	
+	// this method triggers also changed signal
+	foo.madeChange();
+
+	// disconnect is also called after signal/slot destruction
+	foo.changed.disconnect(bar.changeSlot);
 
 	return 0;
 }
